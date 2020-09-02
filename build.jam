@@ -1,0 +1,11 @@
+use-project /boost : c:/local/boost_1_74_0 ;
+
+exe variedade :
+  main.cxx desktop_wallpaper.cxx /boost/program_options :
+  <include>. <cxxstd>latest <address-model>64
+  <linkflags>user32.lib <linkflags>ole32.lib ;
+
+install dist : variedade :
+  <install-dependencies>on <install-type>EXE <install-type>LIB
+  <variant>release:<location>dist/release
+  <variant>debug:<location>dist/debug ;
