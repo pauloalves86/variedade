@@ -38,23 +38,25 @@ bool DesktopWallpaper::SetNextMonitorWallpaper(const fs::path &wallpaper) {
   UINT count = 0;
   HRESULT hr = desktop_wallpaper_->GetMonitorDevicePathCount(&count);
   if (FAILED(hr)) {
-    std::cout << "Count failed." << std::endl;
+    std::cerr << "GetMonitorDevicePathCount failed (" << hr << ")" << std::endl;
     return false;
   }
   UINT monitor_id = UINT(last_monitor_id_ + 1);
   if (monitor_id >= count) {
     monitor_id = 0;
   }
-  last_monitor_id_ = monitor_id;
   LPWSTR monitor;
   hr = desktop_wallpaper_->GetMonitorDevicePathAt(monitor_id, &monitor);
   if (FAILED(hr)) {
-    std::cout << "Monitor path failed." << std::endl;
+    last_monitor_id_ = -1;
+    std::cerr << "GetMonitorDevicePathAt failed (" << hr << ")" << std::endl;
     return false;
   }
   hr = desktop_wallpaper_->SetWallpaper(monitor, wallpaper.c_str());
   if (FAILED(hr)) {
-    std::cout << hr << std::endl;
+    std::cerr << "SetWallpaper failed (" << hr << ")" << std::endl;
+    return false;
   }
-  return SUCCEEDED(hr);
+  last_monitor_id_ = monitor_id;
+  return true;
 }

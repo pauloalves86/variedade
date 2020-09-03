@@ -1,9 +1,12 @@
 use-project /boost : c:/local/boost_1_74_0 ;
 
+win-deps = user32 ole32 shell32 ;
+
 exe variedade :
-  main.cxx desktop_wallpaper.cxx /boost/program_options :
+  main.cxx desktop_wallpaper.cxx get_config_dir.cxx apply_filter.cxx execute.cxx
+  /boost/program_options :
   <include>. <cxxstd>latest <address-model>64
-  <linkflags>user32.lib <linkflags>ole32.lib ;
+  <linkflags>$(win-deps).lib ;
 
 install dist : variedade :
   <install-dependencies>on <install-type>EXE <install-type>LIB
