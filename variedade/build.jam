@@ -5,10 +5,10 @@ win-deps = user32 ole32 shell32 ;
 exe variedade :
   main.cxx desktop_wallpaper.cxx get_config_dir.cxx apply_filter.cxx execute.cxx
   /boost/program_options :
-  <include>. <cxxstd>latest <address-model>64
+  <include>. <cxxstd>latest <address-model>64 <location>../bin
   <linkflags>$(win-deps).lib ;
 
 install dist : variedade :
   <install-dependencies>on <install-type>EXE <install-type>LIB
-  <variant>release:<location>dist/release
-  <variant>debug:<location>dist/debug ;
+  <variant>release:<location>../dist/release
+  <variant>debug:<location>../dist/debug ;
