@@ -3,7 +3,7 @@ use-project /boost : c:/local/boost_1_74_0 ;
 win-deps = user32 ole32 shell32 ;
 
 exe variedade :
-  main.cxx desktop_wallpaper.cxx get_config_dir.cxx apply_filter.cxx execute.cxx
+  main.cc desktop_wallpaper.cc get_config_dir.cc apply_filter.cc execute.cc
   /boost/program_options :
   <include>. <cxxstd>latest <address-model>64 <location>../bin
   <linkflags>$(win-deps).lib ;
