@@ -9,7 +9,7 @@
 
 namespace fs = std::filesystem;
 
-void changer(std::future<void> exit_signal) {
+void changer(std::mutex* m, std::condition_variable* cv, const bool* exit) {
   auto config_file = get_config_dir() / "config.yaml";
   YAML::Node config = YAML::LoadFile(config_file.string());
   if (!config["wallpapers_dir"]) {
@@ -31,8 +31,11 @@ void changer(std::future<void> exit_signal) {
     if (!dw.SetNextMonitorWallpaper(filepath)) {
       // std::cerr << filepath << std::endl;
     }
-    if (exit_signal.wait_for(timer) != std::future_status::timeout) {
-      return;
+    std::unique_lock<std::mutex> lk(*m);
+    if (cv->wait_for(lk, timer) == std::cv_status::no_timeout) {
+      if (*exit) {
+        return;
+      }
     }
   }
 }

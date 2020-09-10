@@ -12,6 +12,8 @@ namespace fs = std::filesystem;
 
 const auto TRAYICON_ID = 13;
 const auto WINDOW_CLASS_NAME = L"VARIEDADEWM";
+std::mutex g_m;
+std::condition_variable g_cv;
 
 void remove_tray_icon(HWND hWnd, UINT uID) {
   NOTIFYICONDATAW nid = {};
@@ -55,6 +57,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wparam,
     case WM_COMMAND:
       switch (LOWORD(wparam)) {
         case IDM_NEXT:
+          g_cv.notify_one();
           break;
         case IDM_PREVIOUS:
           break;
@@ -136,8 +139,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance, PWSTR cmdline,
   if (!init_instance(instance)) {
     return 1;
   }
-  std::promise<void> exit_signaller;
-  std::thread t(changer, exit_signaller.get_future());
+  bool exit = false;
+  std::thread t(changer, &g_m, &g_cv, &exit);
   MSG msg;
   HACCEL acell = LoadAcceleratorsW(instance, MAKEINTRESOURCEW(IDC_VARIEDADEWM));
   while (GetMessage(&msg, NULL, 0, 0)) {
@@ -146,7 +149,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance, PWSTR cmdline,
       DispatchMessage(&msg);
     }
   }
-  exit_signaller.set_value();
+  g_m.lock();
+  exit = true;
+  g_m.unlock();
   t.join();
   return 0;
 }
