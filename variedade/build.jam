@@ -1,12 +1,17 @@
-use-project /boost : c:/local/boost_1_74_0 ;
+# use-project /boost : c:/local/boost_1_74_0 ;
+lib yaml-cpp :
+  :
+  <file>C:/local/yaml-cpp-yaml-cpp-0.6.3/build/Release/libyaml-cppmd.lib :
+  :
+  <include>C:/local/yaml-cpp-yaml-cpp-0.6.3/include ;
 
-win-deps = user32 ole32 shell32 ;
+win-deps = user32 ole32 shell32 kernel32 ;
 
 exe variedade :
-  main.cc desktop_wallpaper.cc get_config_dir.cc apply_filter.cc execute.cc
-  /boost/program_options :
+  [ glob *.cc ] variedade.rc yaml-cpp :
+  <define>_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS <user-interface>gui
   <include>. <cxxstd>latest <address-model>64 <location>../bin
-  <linkflags>$(win-deps).lib ;
+  <linkflags>$(win-deps).lib <define>UNICODE ;
 
 install dist : variedade :
   <install-dependencies>on <install-type>EXE <install-type>LIB

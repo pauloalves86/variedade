@@ -1,97 +1,152 @@
-#include <algorithm>
-#include <chrono>
+#include <windows.h>
+
 #include <fstream>
+#include <future>
 #include <iostream>
-#include <random>
 #include <thread>
-#include <vector>
-// clang-format off
-#include <boost/program_options/options_description.hpp>
-#include <boost/program_options/parsers.hpp>
-#include <boost/program_options/variables_map.hpp>
-// clang-format on
-#include "desktop_wallpaper.h"
-#include "apply_filter.h"
-#include "get_config_dir.h"
+
+#include "changer.h"
+#include "resource.h"
 
 namespace fs = std::filesystem;
-namespace po = boost::program_options;
 
-int main(int argc, char** argv) {
-  po::options_description desc("Allowed options");
-  desc.add_options()  // clang-format off
-    ("help", "produce help message")
-    ("wallpapers_dir", po::value<std::string>(), "wallpapers directory")
-    ("timer", po::value<int>()->default_value(60),
-     "change wallpaper every N seconds")
-  ;  // clang-format on
+const auto TRAYICON_ID = 13;
+const auto WINDOW_CLASS_NAME = L"VARIEDADEWM";
 
-  po::options_description desc_file("Config only options");
-  desc_file.add_options()  // clang-format off
-    ("filter", po::value<std::string>(), "imagemagick filter")
-  ;  // clang-format on
-  po::positional_options_description p;
-  p.add("wallpapers_dir", -1);
+void remove_tray_icon(HWND hWnd, UINT uID) {
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = hWnd;
+  nid.uID = uID;
+  Shell_NotifyIconW(NIM_DELETE, &nid);
+}
 
-  auto config_file = get_config_dir() / "config.ini";
-
-  po::variables_map vm;
-  po::store(
-      po::command_line_parser(argc, argv).options(desc).positional(p).run(),
-      vm);
-  if (fs::exists(config_file)) {
-    std::fstream buffer(config_file);
-    po::parsed_options parsed =
-        po::parse_config_file(buffer, desc.add(desc_file));
-    po::store(parsed, vm);
+BOOL show_popup_menu(HWND hWnd, POINT* curpos, int wDefaultItem) {
+  HMENU hPop = CreatePopupMenu();
+  int i = 0;
+  if (!curpos) {
+    POINT pt;
+    GetCursorPos(&pt);
+    curpos = &pt;
   }
-  po::notify(vm);
+  InsertMenuW(hPop, i++, MF_BYPOSITION | MF_STRING, IDM_NEXT, L"Next");
+  InsertMenuW(hPop, i++, MF_BYPOSITION | MF_STRING, IDM_PREVIOUS, L"Previous");
+  InsertMenuW(hPop, i++, MF_BYPOSITION | MF_STRING, IDM_EXIT, L"Exit");
+  SetMenuDefaultItem(hPop, IDM_NEXT, FALSE);
+  SetFocus(hWnd);
+  SendMessageW(hWnd, WM_INITMENUPOPUP, (WPARAM)hPop, 0);
+  WORD cmd = TrackPopupMenu(
+      hPop, TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+      curpos->x, curpos->y, 0, hWnd, NULL);
+  SendMessageW(hWnd, WM_COMMAND, cmd, 0);
+  DestroyMenu(hPop);
+  return cmd;
+}
 
-  if (vm.count("help")) {
-    std::cerr << desc << std::endl;
-    return 0;
+void on_tray_icon_show_menu(HWND hWnd) {
+  SetForegroundWindow(hWnd);
+  show_popup_menu(hWnd, NULL, -1);
+  PostMessage(hWnd, WM_APP + 1, 0, 0);
+}
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wparam,
+                         LPARAM lparam) {
+  switch (message) {
+    case WM_COMMAND:
+      switch (LOWORD(wparam)) {
+        case IDM_NEXT:
+          break;
+        case IDM_PREVIOUS:
+          break;
+        case IDM_EXIT:
+          remove_tray_icon(hwnd, TRAYICON_ID);
+          DestroyWindow(hwnd);
+          break;
+        default:
+          return DefWindowProc(hwnd, message, wparam, lparam);
+      }
+      break;
+    case WM_PAINT: {
+      PAINTSTRUCT ps = {};
+      BeginPaint(hwnd, &ps);
+      EndPaint(hwnd, &ps);
+      break;
+    }
+    case WM_DESTROY:
+      PostQuitMessage(0);
+      break;
+    case WM_APP + 1: {
+      WORD id = LOWORD(lparam);
+      if (id == WM_RBUTTONUP || id == WM_LBUTTONUP)
+        on_tray_icon_show_menu(hwnd);
+      break;
+    }
+    default:
+      return DefWindowProc(hwnd, message, wparam, lparam);
   }
+  return 0;
+}
 
-  if (vm.count("wallpapers_dir") == 0) {
-    std::cerr << "wallpapers directory is required" << std::endl;
-    std::cerr << desc << std::endl;
+ATOM register_window_class(HINSTANCE instance) {
+  WNDCLASSEXW wcex = {};
+  wcex.cbSize = sizeof(WNDCLASSEX);
+  wcex.style = CS_HREDRAW | CS_VREDRAW;
+  wcex.lpfnWndProc = WndProc;
+  wcex.cbClsExtra = 0;
+  wcex.cbWndExtra = 0;
+  wcex.hInstance = instance;
+  wcex.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_VARIEDADEWM));
+  wcex.hCursor = LoadCursorW(NULL, IDC_ARROW);
+  wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+  wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_VARIEDADEWM);
+  wcex.lpszClassName = WINDOW_CLASS_NAME;
+  wcex.hIconSm = LoadIconW(wcex.hInstance, MAKEINTRESOURCEW(IDI_VARIEDADEWM));
+  return RegisterClassExW(&wcex);
+}
+
+void add_tray_icon(HINSTANCE instance, HWND hwnd, UINT uid, UINT callback_msg,
+                   LPWSTR tooltip) {
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = hwnd;
+  nid.uID = uid;
+  nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+  nid.uCallbackMessage = callback_msg;
+  nid.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_VARIEDADEWM));
+  wsprintfW(nid.szTip, tooltip);
+  Shell_NotifyIconW(NIM_ADD, &nid);
+}
+
+BOOL init_instance(HINSTANCE instance) {
+  HWND hwnd = CreateWindowW(WINDOW_CLASS_NAME, L"Variedade Wallpaper Changer",
+                            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
+                            CW_USEDEFAULT, 0, NULL, NULL, instance, NULL);
+  SetWindowPos(hwnd, NULL, 150, 150, 200, 100, 0);
+  if (!hwnd) {
+    return FALSE;
+  }
+  add_tray_icon(instance, hwnd, TRAYICON_ID, WM_APP + 1, L"VariedadeWM");
+  UpdateWindow(hwnd);
+  return TRUE;
+}
+
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance, PWSTR cmdline,
+                    int cmdshow) {
+  register_window_class(instance);
+  if (!init_instance(instance)) {
     return 1;
   }
-
-  fs::path wallpaper_path{vm["wallpapers_dir"].as<std::string>()};
-  if (!fs::exists(wallpaper_path)) {
-    std::cerr << "wallpapers directory must exists" << std::endl;
-    std::cerr << wallpaper_path << std::endl;
-    return 1;
-  }
-  if (!fs::is_directory(wallpaper_path)) {
-    std::cerr << "wallpapers must be a directory" << std::endl;
-    std::cerr << wallpaper_path << std::endl;
-    return 1;
-  }
-
-  bool use_filter = vm.count("filter") > 0;
-  std::random_device rd;
-  std::mt19937 g(rd());
-  std::chrono::seconds duration(vm["timer"].as<int>());
-  DesktopWallpaper dw;
-  while (true) {
-    auto it = fs::directory_iterator(wallpaper_path);
-    std::vector<fs::directory_entry> files(fs::begin(it), fs::end(it));
-    std::shuffle(files.begin(), files.end(), g);
-    for (auto& file : files) {
-      if (!file.is_regular_file()) {
-        continue;
-      }
-      fs::path filepath(file.path());
-      if (use_filter) {
-        filepath = apply_filter(vm["filter"].as<std::string>(), file.path());
-      }
-      if (!dw.SetNextMonitorWallpaper(filepath)) {
-        std::cerr << filepath << std::endl;
-      }
-      std::this_thread::sleep_for(duration);
+  std::promise<void> exit_signaller;
+  std::thread t(changer, exit_signaller.get_future());
+  MSG msg;
+  HACCEL acell = LoadAcceleratorsW(instance, MAKEINTRESOURCEW(IDC_VARIEDADEWM));
+  while (GetMessage(&msg, NULL, 0, 0)) {
+    if (!TranslateAccelerator(msg.hwnd, acell, &msg)) {
+      TranslateMessage(&msg);
+      DispatchMessage(&msg);
     }
   }
+  exit_signaller.set_value();
+  t.join();
   return 0;
 }
