@@ -1,4 +1,5 @@
-#include <get_config_dir.h>
+#include "variedade/get_config_dir.h"
+
 #include <Shlobj.h>
 
 #include <filesystem>

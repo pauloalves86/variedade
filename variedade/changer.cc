@@ -2,14 +2,15 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "apply_filter.h"
-#include "desktop_wallpaper.h"
-#include "endless_wallpaper.h"
-#include "get_config_dir.h"
+#include "variedade/apply_filter.h"
+#include "variedade/desktop_wallpaper.h"
+#include "variedade/endless_wallpaper.h"
+#include "variedade/get_config_dir.h"
 
 namespace fs = std::filesystem;
 
-void changer(std::mutex* m, std::condition_variable* cv, const bool* exit) {
+void changer(std::mutex* m, std::condition_variable* cv,
+             const ChangerCommand* cmd) {
   auto config_file = get_config_dir() / "config.yaml";
   YAML::Node config = YAML::LoadFile(config_file.string());
   if (!config["wallpapers_dir"]) {
@@ -33,8 +34,11 @@ void changer(std::mutex* m, std::condition_variable* cv, const bool* exit) {
     }
     std::unique_lock<std::mutex> lk(*m);
     if (cv->wait_for(lk, timer) == std::cv_status::no_timeout) {
-      if (*exit) {
+      switch (*cmd) {
+      case kStop:
         return;
+      case kNext:
+        break;
       }
     }
   }
